@@ -60,6 +60,8 @@ v3, ok3 := <-bufCh
 fmt.Println(v3, ok3)  // 输出: 0 false
 ```
 
+[前面的内容保持不变]
+
 ## 2. Select 语句的行为和执行流程
 
 ### 2.1 基本语法
@@ -75,39 +77,122 @@ default:
 ```
 
 ### 2.2 执行流程
+Select 语句的执行流程根据是否包含 default 分支而有所不同：
+
 1. 不带 default 分支的 select：
    - 阻塞直到某个 case 可以执行。
    - 如果多个 case 同时就绪，随机选择一个执行。
+   - 用于等待多个并发事件中的任意一个。
 
 2. 带 default 分支的 select：
+   - 立即执行一次对所有 case 的检查。
+   - 如果有 case 就绪，随机选择一个执行。
    - 如果没有 case 就绪，立即执行 default 分支。
-   - 非阻塞操作。
+   - 执行完选中的分支后，整个 select 语句就结束了。
+   - 用于执行非阻塞的检查或操作。
 
-### 2.3 示例：不带 default 的 select
+### 2.3 示例：不带 default 的 select（阻塞式）
 
 ```go
-func example(ctx context.Context) {
+func waitForEvents(ctx context.Context, ch chan int) {
     select {
     case <-ctx.Done():
         fmt.Println("Context was canceled")
-    case <-time.After(5 * time.Second):
-        fmt.Println("Finished without cancellation")
+    case val := <-ch:
+        fmt.Printf("Received value: %d\n", val)
     }
+    // 这里的代码只有在上面的某个 case 执行后才会运行
 }
+
+// 使用示例
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+ch := make(chan int)
+
+go func() {
+    time.Sleep(2 * time.Second)
+    ch <- 42
+}()
+
+waitForEvents(ctx, ch)
 ```
 
-### 2.4 示例：带 default 的 select
+在这个例子中，`select` 会阻塞等待，直到 `ctx.Done()` 被关闭或 `ch` 接收到值。
+
+### 2.4 示例：带 default 的 select（非阻塞式）
 
 ```go
-func nonBlockingReceive(ch chan int) (int, bool) {
+func nonBlockingReceive(ch chan int) {
     select {
     case val := <-ch:
-        return val, true
+        fmt.Printf("Received value: %d\n", val)
     default:
-        return 0, false
+        fmt.Println("No value available")
+    }
+    fmt.Println("Continuing execution...")
+    // 无论是否接收到值，这里的代码都会立即执行
+}
+
+// 使用示例
+ch := make(chan int)
+go func() {
+    time.Sleep(2 * time.Second)
+    ch <- 42
+}()
+
+nonBlockingReceive(ch)  // 立即打印 "No value available" 并继续
+time.Sleep(3 * time.Second)
+nonBlockingReceive(ch)  // 打印 "Received value: 42"
+```
+
+在这个例子中，`select` 会立即检查 `ch` 是否可读。如果不可读，它会立即执行 default 分支，而不会阻塞等待。
+
+### 2.5 Select 的关键特性
+
+1. 随机性：当多个 case 同时就绪时，select 会随机选择一个执行。这有助于避免饥饿问题。
+
+2. 零操作：select{}（没有任何 case 的 select）会永远阻塞。
+
+3. 单次执行：select 语句只会执行一次。如果需要持续监听多个 channel，通常需要将 select 放在一个循环中。
+
+4. 非阻塞操作：带 default 的 select 可以用于实现非阻塞的 channel 操作。
+
+### 2.6 使用场景
+
+1. 超时处理：
+```go
+select {
+case result := <-ch:
+    fmt.Println("Received:", result)
+case <-time.After(2 * time.Second):
+    fmt.Println("Operation timed out")
+}
+```
+
+2. 优雅退出：
+```go
+for {
+    select {
+    case <-stopCh:
+        return
+    case data := <-workCh:
+        process(data)
     }
 }
 ```
+
+3. 非阻塞通信：
+```go
+select {
+case ch <- value:
+    fmt.Println("Sent value")
+default:
+    fmt.Println("Channel full, discarding value")
+}
+```
+
+理解 select 的这些行为和特性对于编写高效、正确的并发 Go 程序至关重要。select 提供了强大的多路复用能力，使得处理多个 channel 的并发操作变得简单而优雅。
+
 
 ## 3. struct{} 在 Channel 中的应用
 
