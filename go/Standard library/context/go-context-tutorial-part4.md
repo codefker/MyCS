@@ -194,6 +194,25 @@ func goodContextReuse(ctx context.Context) {
     }
     // ...
 }
+//附加:
+/*
+1.defer cancel() 的执行：
+
+是的，即使在 if 语句中执行了 cancel() 并返回，函数结束时 defer cancel() 仍然会执行。
+defer 语句会在函数返回之前执行，无论函数是如何返回的（正常返回、通过 return 语句返回，还是发生 panic）。
+
+
+2.多次执行 cancel：
+
+多次调用同一个 cancel 函数是完全安全的。
+context 包的设计确保了多次调用 cancel 不会导致任何问题。
+
+
+3.cancel 函数的行为：
+
+第一次调用 cancel 会关闭 context 的 Done channel 并释放相关资源。
+后续的调用不会有任何效果，也不会导致错误。
+*/
 ```
 
 ### 3.5 在 Context 中存储可修改的对象
