@@ -77,6 +77,44 @@ func gracefulShutdown(ctx context.Context) error {
         return nil
     }
 }
+
+//假设的完整场景
+var stopChan = make(chan struct{})
+var doneChan = make(chan struct{})
+
+func main() {
+    ctx := context.Background()
+    
+    // 启动长时间运行的操作
+    go longRunningOperation()
+
+    // 某个时刻，决定停止操作
+    err := gracefulShutdown(ctx)
+    if err != nil {
+        log.Printf("Shutdown error: %v", err)
+    }
+}
+
+func longRunningOperation() {
+    for {
+        select {
+        case <-stopChan:
+            // 收到停止信号，开始清理
+            cleanup()
+            close(doneChan) // 通知清理完成
+            return
+        default:
+            // 继续正常操作
+            // ...
+        }
+    }
+}
+
+func cleanup() {
+    // 执行一些清理操作
+    // 可能需要一些时间
+    time.Sleep(5 * time.Second) // 模拟清理过程
+}
 ```
 
 ## 4. Context 值的高级用法
